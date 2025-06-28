@@ -5,6 +5,13 @@ local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
+-- Anti-AFK
+local VirtualUser = game:GetService("VirtualUser")
+Players.LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
 -- State Variables
 local guiVisible = true
 local savedPosition = nil
