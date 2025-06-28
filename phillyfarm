@@ -5,21 +5,29 @@ local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
+-- State Variables
 local guiVisible = true
 local savedPosition = nil
 local autoTeleportEnabled = true
+local resetDelay = 2 -- default reset delay in seconds
 
--- Command listeners
+-- Command User IDs
 local commandUserIds = {
     [2001373470] = true, -- Jelizaxo
     [8718078262] = true, -- Mvuliq
 }
 
+-- Command Logic State
 local orbitConnection = nil
 local standConnection = nil
 local isOrbiting = false
 local isHiding = false
 
+-- Drag & Slider State
+local dragging, dragInput, dragStart, startPos
+local sliderDragging = false
+
+-- Utility Functions
 local function getHRP(plr)
     local char = plr.Character or plr.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart", 2)
@@ -29,9 +37,7 @@ local function safeTeleport(hrp, cframe)
     local attempts = 0
     while attempts < 5 do
         task.wait(0.1)
-        local success = pcall(function()
-            hrp.CFrame = cframe
-        end)
+        local success = pcall(function() hrp.CFrame = cframe end)
         if success then break end
         attempts += 1
     end
@@ -40,18 +46,18 @@ local function safeTeleport(hrp, cframe)
     end
 end
 
--- GUI
+-- Main GUI Setup
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "UtilityGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local loadingText = Instance.new("TextLabel")
-loadingText.Size = UDim2.new(1, 0, 1, 0)
-loadingText.Position = UDim2.new(0, 0, 0, 0)
+loadingText.Size = UDim2.new(1,0,1,0)
+loadingText.Position = UDim2.new(0,0,0,0)
 loadingText.Text = "made by cr7me"
 loadingText.BackgroundTransparency = 1
-loadingText.TextColor3 = Color3.new(1, 1, 1)
+loadingText.TextColor3 = Color3.new(1,1,1)
 loadingText.Font = Enum.Font.SourceSansBold
 loadingText.TextSize = 24
 loadingText.Parent = screenGui
@@ -59,21 +65,21 @@ loadingText.Parent = screenGui
 task.delay(2.5, function()
     loadingText:Destroy()
 
+    -- Main Frame
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 200, 0, 230)
-    mainFrame.Position = UDim2.new(0.5, -100, 0.5, -115)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    mainFrame.Size = UDim2.new(0,230,0,270)
+    mainFrame.Position = UDim2.new(0.5,-115,0.5,-135)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
+    corner.CornerRadius = UDim.new(0,12)
     corner.Parent = mainFrame
 
-    local dragging, dragInput, dragStart, startPos
-
+    -- Draggable Logic
     mainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and not sliderDragging then
             dragging = true
             dragStart = input.Position
             startPos = mainFrame.Position
@@ -84,13 +90,11 @@ task.delay(2.5, function()
             end)
         end
     end)
-
     mainFrame.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement then
             dragInput = input
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
@@ -103,6 +107,7 @@ task.delay(2.5, function()
         end
     end)
 
+    -- Toggle GUI Visibility
     UserInputService.InputBegan:Connect(function(input, processed)
         if not processed and input.KeyCode == Enum.KeyCode.M then
             guiVisible = not guiVisible
@@ -110,153 +115,200 @@ task.delay(2.5, function()
         end
     end)
 
+    -- Title
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
+    title.Size = UDim2.new(1,0,0,40)
+    title.Position = UDim2.new(0,0,0,0)
     title.BackgroundTransparency = 1
     title.Text = "philly farm"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextColor3 = Color3.fromRGB(255,255,255)
     title.Font = Enum.Font.GothamBold
     title.TextScaled = true
     title.Parent = mainFrame
 
-    local function createButton(name, text, yOffset)
+    -- Helper: Create Button
+    local function createButton(name, text, y)
         local btn = Instance.new("TextButton")
         btn.Name = name
-        btn.Size = UDim2.new(1, -20, 0, 35)
-        btn.Position = UDim2.new(0, 10, 0, yOffset)
+        btn.Size = UDim2.new(1,-20,0,35)
+        btn.Position = UDim2.new(0,10,0,y)
         btn.Text = text
-        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        btn.TextColor3 = Color3.new(1,1,1)
         btn.Font = Enum.Font.SourceSansBold
         btn.TextScaled = true
         btn.BorderSizePixel = 0
         btn.Parent = mainFrame
-
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 8)
-        corner.Parent = btn
-
+        local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0,8) c.Parent = btn
         return btn
     end
 
+    -- Status Label
     local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, -20, 0, 25)
-    statusLabel.Position = UDim2.new(0, 10, 0, 185)
+    statusLabel.Size = UDim2.new(1,-20,0,25)
+    statusLabel.Position = UDim2.new(0,10,0,230)
     statusLabel.BackgroundTransparency = 1
-    statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    statusLabel.TextColor3 = Color3.new(1,1,1)
     statusLabel.Font = Enum.Font.SourceSansBold
     statusLabel.TextScaled = true
     statusLabel.Text = "Status: On"
     statusLabel.Parent = mainFrame
 
-    -- Notification label for "Position Saved!"
+    -- Notification Label
     local notification = Instance.new("TextLabel")
-    notification.Size = UDim2.new(1, -20, 0, 30)
-    notification.Position = UDim2.new(0, 10, 1, -40)
-    notification.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-    notification.TextColor3 = Color3.new(1, 1, 1)
-    notification.Text = ""
-    notification.Visible = false
+    notification.Size = UDim2.new(1,-20,0,30)
+    notification.Position = UDim2.new(0,10,1,-40)
+    notification.BackgroundColor3 = Color3.fromRGB(0,150,0)
+    notification.TextColor3 = Color3.new(1,1,1)
     notification.Font = Enum.Font.SourceSansBold
     notification.TextScaled = true
     notification.BorderSizePixel = 0
+    notification.Visible = false
     notification.Parent = mainFrame
-
-    local function showNotification(text, color)
-        notification.Text = text
-        notification.BackgroundColor3 = color or Color3.fromRGB(0, 150, 0)
+    local function showNotification(txt)
+        notification.Text = txt
         notification.Visible = true
-        task.delay(2, function()
-            notification.Visible = false
-        end)
+        task.delay(2,function() notification.Visible = false end)
     end
 
-    local saveBtn = createButton("SaveBtn", "Save Position", 50)
+    -- Buttons
+    local saveBtn = createButton("SaveBtn","Save Position",50)
     saveBtn.MouseButton1Click:Connect(function()
         local char = player.Character or player.CharacterAdded:Wait()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
             savedPosition = hrp.Position
-            showNotification("Position Saved!", Color3.fromRGB(0, 150, 0))
+            showNotification("Position Saved!")
         end
     end)
 
-    local fpsBtn = createButton("FPSBtn", "FPS Boost", 95)
+    local fpsBtn = createButton("FPSBtn","FPS Boost",95)
     fpsBtn.MouseButton1Click:Connect(function()
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 1e10
-        Lighting.Brightness = 0
-        for _, v in pairs(Lighting:GetDescendants()) do
-            if v:IsA("PostEffect") then v.Enabled = false end
+        Lighting.GlobalShadows=false
+        Lighting.FogEnd=1e10
+        Lighting.Brightness=0
+        for _,v in pairs(Lighting:GetDescendants()) do
+            if v:IsA("PostEffect") then v.Enabled=false end
         end
-        for _, obj in ipairs(workspace:GetDescendants()) do
+        for _,obj in ipairs(workspace:GetDescendants()) do
             if obj:IsA("BasePart") then
-                obj.Material = Enum.Material.SmoothPlastic
-                obj.CastShadow = false
+                obj.Material=Enum.Material.SmoothPlastic
+                obj.CastShadow=false
             elseif obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
                 obj:Destroy()
             end
         end
-        if workspace:FindFirstChildOfClass("Terrain") then
-            local terrain = workspace:FindFirstChildOfClass("Terrain")
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
-            terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 1
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize=0
+            terrain.WaterWaveSpeed=0
+            terrain.WaterReflectance=0
+            terrain.WaterTransparency=1
+        end
+        showNotification("FPS Boost Activated!")
+    end)
+
+    local toggleBtn = createButton("ToggleBtn","Toggle AutoTeleport",140)
+    toggleBtn.MouseButton1Click:Connect(function()
+        autoTeleportEnabled = not autoTeleportEnabled
+        statusLabel.Text = "Status: "..(autoTeleportEnabled and "On" or "Off")
+    end)
+
+    -- Reset Delay Slider UI
+    local resetDelayLabel = Instance.new("TextLabel")
+    resetDelayLabel.Size = UDim2.new(0,100,0,25)
+    resetDelayLabel.Position = UDim2.new(0,10,0,185)
+    resetDelayLabel.BackgroundTransparency = 1
+    resetDelayLabel.TextColor3 = Color3.new(1,1,1)
+    resetDelayLabel.Font = Enum.Font.SourceSansBold
+    resetDelayLabel.TextScaled = true
+    resetDelayLabel.Text = "Reset Delay: 2.0s"
+    resetDelayLabel.Parent = mainFrame
+
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(0,100,0,10)
+    sliderFrame.Position = UDim2.new(0,120,0,190)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    sliderFrame.BorderSizePixel = 0
+    sliderFrame.Parent = mainFrame
+
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new(resetDelay/10,0,1,0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(0,150,0)
+    sliderFill.Parent = sliderFrame
+
+    local sliderKnob = Instance.new("Frame")
+    sliderKnob.Size = UDim2.new(0,18,0,18)
+    sliderKnob.Position = UDim2.new(resetDelay/10,0,0.5,0)
+    sliderKnob.AnchorPoint = Vector2.new(0.5,0.5)
+    sliderKnob.BackgroundColor3 = Color3.fromRGB(0,200,0)
+    sliderKnob.BorderSizePixel = 0
+    sliderKnob.Parent = sliderFrame
+    local knobCorner = Instance.new("UICorner")
+    knobCorner.CornerRadius = UDim.new(0,9)
+    knobCorner.Parent = sliderKnob
+
+    local function setSlider(val)
+        resetDelay = math.clamp(val,0,10)
+        sliderFill.Size = UDim2.new(resetDelay/10,0,1,0)
+        sliderKnob.Position = UDim2.new(resetDelay/10,0,0.5,0)
+        resetDelayLabel.Text = string.format("Reset Delay: %.1fs", resetDelay)
+    end
+
+    sliderFrame.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliderDragging = true
+            dragging = false
+        end
+    end)
+    sliderFrame.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliderDragging = false
+            dragging = false
+        end
+    end)
+    sliderFrame.InputChanged:Connect(function(inp)
+        if sliderDragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local relX = math.clamp(inp.Position.X - sliderFrame.AbsolutePosition.X, 0, sliderFrame.AbsoluteSize.X)
+            setSlider((relX / sliderFrame.AbsoluteSize.X) * 10)
         end
     end)
 
-    local toggleBtn = createButton("ToggleBtn", "Toggle AutoTeleport", 140)
-    toggleBtn.MouseButton1Click:Connect(function()
-        autoTeleportEnabled = not autoTeleportEnabled
-        statusLabel.Text = "Status: " .. (autoTeleportEnabled and "On" or "Off")
-    end)
-
-    Players.LocalPlayer.CharacterAdded:Connect(function(char)
+    -- Teleport back logic with reset
+    player.CharacterAdded:Connect(function(char)
         local function tpBack()
-            local hrp = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart")
+            local hrp = char:WaitForChild("HumanoidRootPart")
             if hrp and savedPosition and autoTeleportEnabled then
                 task.wait(0.3)
                 hrp.CFrame = CFrame.new(savedPosition)
-                task.wait(2)
+                task.wait(resetDelay)
                 player.Character:BreakJoints()
             end
         end
-
-        if char:FindFirstChild("HumanoidRootPart") then
-            tpBack()
-        else
-            char.ChildAdded:Connect(function(c)
-                if c.Name == "HumanoidRootPart" then
-                    tpBack()
-                end
-            end)
-        end
+        tpBack()
     end)
 end)
 
--- Chat command logic (no GUI)
+-- Command Handler
 local function handleCommand(cmd)
     local target = Players:GetPlayerByUserId(2001373470) or Players:GetPlayerByUserId(8718078262)
     if not target then return end
     if cmd == "!bring" then
         local hrp = getHRP(player)
-        local targetHRP = getHRP(target)
-        if hrp and targetHRP then
-            safeTeleport(hrp, targetHRP.CFrame + Vector3.new(3,0,0))
-        end
+        local tHRP = getHRP(target)
+        if hrp and tHRP then safeTeleport(hrp, tHRP.CFrame + Vector3.new(3,0,0)) end
     elseif cmd == "!orbit" then
         if orbitConnection then orbitConnection:Disconnect() orbitConnection = nil end
         isOrbiting = not isOrbiting
         if isOrbiting then
-            local angle = 0
+            local ang = 0
             orbitConnection = RunService.Heartbeat:Connect(function(dt)
                 local hrp = getHRP(player)
-                local targetHRP = getHRP(target)
-                if hrp and targetHRP then
-                    angle += math.pi * 2 * dt
-                    local offset = Vector3.new(math.cos(angle) * 5, 0, math.sin(angle) * 5)
-                    hrp.CFrame = targetHRP.CFrame * CFrame.new(offset)
+                local tHRP = getHRP(target)
+                if hrp and tHRP then
+                    ang += math.pi*2*dt
+                    local off = Vector3.new(math.cos(ang)*5, 0, math.sin(ang)*5)
+                    hrp.CFrame = tHRP.CFrame * CFrame.new(off)
                 end
             end)
         end
@@ -264,9 +316,9 @@ local function handleCommand(cmd)
         if standConnection then standConnection:Disconnect() standConnection = nil end
         standConnection = RunService.Heartbeat:Connect(function()
             local hrp = getHRP(player)
-            local targetHRP = getHRP(target)
-            if hrp and targetHRP then
-                hrp.CFrame = targetHRP.CFrame * CFrame.new(-1.5, 3.5, 2)
+            local tHRP = getHRP(target)
+            if hrp and tHRP then
+                hrp.CFrame = tHRP.CFrame * CFrame.new(-1.5, 3.5, 2)
             end
         end)
     elseif cmd == "!hide" then
@@ -277,8 +329,11 @@ local function handleCommand(cmd)
         local tool = player.Character and player.Character:FindFirstChildOfClass("Tool")
         if tool then tool:Activate() end
     elseif cmd == "!stop" then
-        if orbitConnection then orbitConnection:Disconnect() orbitConnection = nil end
-        if standConnection then standConnection:Disconnect() standConnection = nil end
+        autoTeleportEnabled = false
+        statusLabel.Text = "Status: Off"
+        local tHRP = getHRP(target)
+        local pHRP = getHRP(player)
+        if tHRP and pHRP then pHRP.CFrame = tHRP.CFrame * CFrame.new(-2, 0, 0) end
     elseif cmd == "!kick" then
         player:Kick("You have been kicked by Jelizaxo.")
     elseif cmd == "!rejoin" then
@@ -286,36 +341,32 @@ local function handleCommand(cmd)
     end
 end
 
+-- Chat Monitor
 local function monitorChatUI()
     local list
-    while not list do
+    repeat
         local gui = player:FindFirstChild("PlayerGui"):FindFirstChild("Main")
-        if gui then list = gui:FindFirstChild("List", true) end
+        list = gui and gui:FindFirstChild("List", true)
         task.wait(0.5)
-    end
-
-    local function onLabel(lbl)
+    until list
+    local function watch(lbl)
         local function check()
             local txt = lbl.Text:lower()
-            for id in pairs(commandUserIds) do
-                local sender = Players:GetPlayerByUserId(id)
-                if sender and txt:find(sender.Name:lower()) and txt:find("!") then
-                    local command = txt:match("!(%w+)")
-                    if command then handleCommand("!" .. command) end
+            if txt:find("!") then
+                for id in pairs(commandUserIds) do
+                    local u = Players:GetPlayerByUserId(id)
+                    if u and txt:find(u.Name:lower()) then
+                        local c = txt:match("!(%w+)")
+                        if c then handleCommand("!"..c) end
+                    end
                 end
             end
         end
         check()
         lbl:GetPropertyChangedSignal("Text"):Connect(check)
     end
-
-    list.DescendantAdded:Connect(function(d)
-        if d:IsA("TextLabel") then onLabel(d) end
-    end)
-
-    for _, d in ipairs(list:GetDescendants()) do
-        if d:IsA("TextLabel") then onLabel(d) end
-    end
+    list.DescendantAdded:Connect(function(d) if d:IsA("TextLabel") then watch(d) end end)
+    for _, d in ipairs(list:GetDescendants()) do if d:IsA("TextLabel") then watch(d) end end
 end
 
 monitorChatUI()
